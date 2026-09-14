@@ -1,0 +1,54 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN"
+  "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  llama-server（方案 §28.3）。
+
+  这是 LaunchAgent，不是 LaunchDaemon（§17.1）：本系统要读写用户目录下的源文件与
+  输出目录，而 LaunchDaemon 在现代 macOS 上访问 TCC 保护目录基本只能靠 MDM 下发
+  PPPC 描述文件。放 ~/Library/LaunchAgents/ 并开启自动登录。
+
+  install.sh 会把 @@INSTALL_ROOT@@ 与 @@MODEL_FILE@@ 替换成实际路径。
+-->
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>com.offline-translator.llama</string>
+
+  <key>ProgramArguments</key>
+  <array>
+    <string>@@INSTALL_ROOT@@/runtime/llama-server</string>
+    <!-- 本地路径。绝不能用官方示例里的 -hf，那会联网从 Hugging Face 拉取（§4.2/§20/§26）。 -->
+    <string>-m</string>
+    <string>@@INSTALL_ROOT@@/models/hy-mt1.5/@@MODEL_FILE@@</string>
+    <string>--host</string>
+    <string>127.0.0.1</string>
+    <string>--port</string>
+    <string>8001</string>
+    <string>-c</string>
+    <string>4096</string>
+    <!-- 把全部层交给 Metal。Apple Silicon 上必加，漏了就退化成纯 CPU。 -->
+    <string>-ngl</string>
+    <string>99</string>
+  </array>
+
+  <!-- RunAtLoad + 自动登录 → §17 的「开机自动启动」 -->
+  <key>RunAtLoad</key>
+  <true/>
+  <!-- KeepAlive → §17 的「异常自动重启」 -->
+  <key>KeepAlive</key>
+  <true/>
+
+  <key>WorkingDirectory</key>
+  <string>@@INSTALL_ROOT@@</string>
+
+  <!-- 日志本地保存（§17） -->
+  <key>StandardOutPath</key>
+  <string>@@INSTALL_ROOT@@/logs/llama.out.log</string>
+  <key>StandardErrorPath</key>
+  <string>@@INSTALL_ROOT@@/logs/llama.err.log</string>
+
+  <key>ProcessType</key>
+  <string>Interactive</string>
+</dict>
+</plist>

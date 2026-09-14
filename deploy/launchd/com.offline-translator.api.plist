@@ -1,0 +1,47 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN"
+  "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  FastAPI 服务（方案 §28.3）。
+
+  launchd 不保证启动顺序，API 可能先于 llama-server 起来。
+  不要试图用 launchd 表达依赖 —— 依赖处理放在 API 侧：
+  /api/v1/health 在 llama-server 未就绪时返回 503，服务本身不退出，
+  所以 KeepAlive 也不会因此反复重启它。
+-->
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>com.offline-translator.api</string>
+
+  <key>ProgramArguments</key>
+  <array>
+    <string>@@INSTALL_ROOT@@/.venv/bin/python</string>
+    <string>-m</string>
+    <string>app.main</string>
+  </array>
+
+  <key>EnvironmentVariables</key>
+  <dict>
+    <key>OFFLINE_TRANSLATOR_CONFIG</key>
+    <string>@@INSTALL_ROOT@@/config/config.yaml</string>
+    <key>PYTHONPATH</key>
+    <string>@@INSTALL_ROOT@@</string>
+    <key>PYTHONUNBUFFERED</key>
+    <string>1</string>
+  </dict>
+
+  <key>RunAtLoad</key>
+  <true/>
+  <key>KeepAlive</key>
+  <true/>
+
+  <key>WorkingDirectory</key>
+  <string>@@INSTALL_ROOT@@</string>
+
+  <key>StandardOutPath</key>
+  <string>@@INSTALL_ROOT@@/logs/api.out.log</string>
+  <key>StandardErrorPath</key>
+  <string>@@INSTALL_ROOT@@/logs/api.err.log</string>
+</dict>
+</plist>

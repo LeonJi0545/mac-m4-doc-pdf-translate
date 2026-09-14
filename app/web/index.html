@@ -1,0 +1,264 @@
+<!DOCTYPE html>
+<!--
+  极简界面（方案 §6）。只有 6 个元素：
+    1 原文件目录  2 翻译后目录  3 源语言  4 目标语言  5 开始翻译  6 当前进度
+
+  刻意不做：模型选择、Quality Mode、模型切换、高级推理参数页、复杂任务中心。
+
+  零外部资源 —— 没有 CDN、没有网络字体、没有构建步骤。
+  断网环境下任何外链都会挂，而这台机器是完全断网运行的（§20）。
+-->
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Offline Document Translator</title>
+  <style>
+    :root {
+      --bg: #f6f6f4; --card: #fff; --line: #d9d9d4; --text: #1d1d1b;
+      --muted: #6b6b66; --accent: #2f6f4f; --danger: #a33;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0; padding: 32px 16px; background: var(--bg); color: var(--text);
+      font: 14px/1.6 -apple-system, "PingFang SC", "Microsoft YaHei", sans-serif;
+    }
+    .card {
+      max-width: 620px; margin: 0 auto; background: var(--card);
+      border: 1px solid var(--line); border-radius: 10px; padding: 24px 26px;
+    }
+    h1 { font-size: 17px; margin: 0 0 22px; font-weight: 600; }
+    label { display: block; font-size: 12px; color: var(--muted); margin-bottom: 5px; }
+    .field { margin-bottom: 16px; }
+    .row { display: flex; gap: 8px; }
+    .row > input { flex: 1; }
+    .langs { display: flex; gap: 16px; }
+    .langs > div { flex: 1; }
+    input, select, button {
+      font: inherit; padding: 8px 10px; border: 1px solid var(--line);
+      border-radius: 6px; background: #fff; color: var(--text);
+    }
+    input, select { width: 100%; }
+    button { cursor: pointer; background: #fff; }
+    button:hover:not(:disabled) { border-color: var(--accent); }
+    button:disabled { opacity: .5; cursor: default; }
+    #start {
+      width: 100%; margin-top: 8px; background: var(--accent); color: #fff;
+      border-color: var(--accent); padding: 10px; font-weight: 600;
+    }
+    #status {
+      margin-top: 20px; padding-top: 16px; border-top: 1px solid var(--line);
+      font-variant-numeric: tabular-nums;
+    }
+    .muted { color: var(--muted); font-size: 12px; }
+    .err { color: var(--danger); }
+    .bar { height: 6px; background: var(--bg); border-radius: 3px; margin: 8px 0; }
+    .bar > i { display: block; height: 100%; background: var(--accent);
+               border-radius: 3px; width: 0; transition: width .25s; }
+    details { margin-top: 10px; font-size: 12px; }
+    details li { margin-bottom: 4px; word-break: break-all; }
+    dialog { border: 1px solid var(--line); border-radius: 10px; padding: 0;
+             width: min(520px, 92vw); }
+    dialog header { padding: 12px 16px; border-bottom: 1px solid var(--line);
+                    font-size: 12px; color: var(--muted); word-break: break-all; }
+    dialog ul { list-style: none; margin: 0; padding: 8px; max-height: 320px;
+                overflow: auto; }
+    dialog li button { width: 100%; text-align: left; border: none; padding: 7px 10px; }
+    dialog li button:hover { background: var(--bg); }
+    dialog footer { padding: 10px 16px; border-top: 1px solid var(--line);
+                    display: flex; gap: 8px; justify-content: flex-end; }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <h1>Offline Document Translator</h1>
+
+    <div class="field">
+      <label for="source">原文件目录</label>
+      <div class="row">
+        <input id="source" spellcheck="false">
+        <button type="button" data-pick="source">选择</button>
+      </div>
+    </div>
+
+    <div class="field">
+      <label for="output">翻译后目录</label>
+      <div class="row">
+        <input id="output" spellcheck="false">
+        <button type="button" data-pick="output">选择</button>
+      </div>
+    </div>
+
+    <div class="field langs">
+      <div>
+        <label for="srcLang">源语言</label>
+        <select id="srcLang">
+          <option value="auto">Auto</option>
+          <option value="en">English</option>
+          <option value="de">German</option>
+          <option value="it">Italian</option>
+          <option value="zh">中文</option>
+        </select>
+      </div>
+      <div>
+        <label for="tgtLang">目标语言</label>
+        <select id="tgtLang">
+          <option value="zh">中文</option>
+          <option value="en">English</option>
+        </select>
+      </div>
+    </div>
+
+    <button id="start" type="button">开始翻译</button>
+
+    <div id="status">
+      <div id="stateLine" class="muted">就绪</div>
+      <div class="bar"><i id="bar"></i></div>
+      <div id="summary" class="muted"></div>
+      <div id="failures"></div>
+    </div>
+  </div>
+
+  <dialog id="picker">
+    <header id="pickerPath"></header>
+    <ul id="pickerList"></ul>
+    <footer>
+      <button type="button" id="pickerUp">上一级</button>
+      <button type="button" id="pickerCancel">取消</button>
+      <button type="button" id="pickerOk">选择此目录</button>
+    </footer>
+  </dialog>
+
+<script>
+const $ = (id) => document.getElementById(id);
+let pollTimer = null;
+let pickerTarget = null;
+let pickerPath = "";
+
+async function api(path, options) {
+  const res = await fetch(path, options);
+  const body = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(body.detail || `HTTP ${res.status}`);
+  return body;
+}
+
+// ── 目录选择（走 /api/v1/browse，浏览器拿不到服务端绝对路径）──────────────
+async function openPicker(target) {
+  pickerTarget = target;
+  await loadPicker($(target).value || "");
+  $("picker").showModal();
+}
+
+async function loadPicker(path) {
+  let data;
+  try {
+    data = await api(`/api/v1/browse?path=${encodeURIComponent(path)}`);
+  } catch (e) {
+    data = await api("/api/v1/browse?path=");
+  }
+  pickerPath = data.path;
+  $("pickerPath").textContent = data.path;
+  $("pickerUp").disabled = !data.parent;
+  $("pickerUp").dataset.parent = data.parent || "";
+  const list = $("pickerList");
+  list.textContent = "";
+  for (const d of data.dirs) {
+    const li = document.createElement("li");
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.textContent = d.name + "/";
+    btn.onclick = () => loadPicker(d.path);
+    li.appendChild(btn);
+    list.appendChild(li);
+  }
+}
+
+$("pickerUp").onclick = () => loadPicker($("pickerUp").dataset.parent);
+$("pickerCancel").onclick = () => $("picker").close();
+$("pickerOk").onclick = () => { $(pickerTarget).value = pickerPath; $("picker").close(); };
+for (const b of document.querySelectorAll("[data-pick]")) {
+  b.onclick = () => openPicker(b.dataset.pick);
+}
+
+// ── 任务 ─────────────────────────────────────────────────────────────────
+function setState(text, isError) {
+  const el = $("stateLine");
+  el.textContent = text;
+  el.className = isError ? "err" : "muted";
+}
+
+$("start").onclick = async () => {
+  $("start").disabled = true;
+  $("failures").textContent = "";
+  $("summary").textContent = "";
+  setState("正在建立任务…");
+  try {
+    const job = await api("/api/v1/jobs", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        source_dir: $("source").value.trim(),
+        output_dir: $("output").value.trim(),
+        source_language: $("srcLang").value,
+        target_language: $("tgtLang").value,
+      }),
+    });
+    poll(job.job_id);
+  } catch (e) {
+    setState(e.message, true);
+    $("start").disabled = false;
+  }
+};
+
+function poll(jobId) {
+  clearInterval(pollTimer);
+  const tick = async () => {
+    try {
+      const s = await api(`/api/v1/jobs/${jobId}`);
+      setState(`状态：${s.progress} / ${s.total}　（${s.status}）`);
+      $("bar").style.width = s.total ? `${(s.progress / s.total) * 100}%` : "0";
+      if (s.status === "completed" || s.status === "failed") {
+        clearInterval(pollTimer);
+        $("start").disabled = false;
+        $("summary").textContent = s.summary;
+        renderFailures(s.failures);
+      }
+    } catch (e) {
+      clearInterval(pollTimer);
+      $("start").disabled = false;
+      setState(e.message, true);
+    }
+  };
+  tick();
+  pollTimer = setInterval(tick, 2000);
+}
+
+function renderFailures(failures) {
+  const box = $("failures");
+  box.textContent = "";
+  if (!failures || !failures.length) return;
+  const details = document.createElement("details");
+  const sum = document.createElement("summary");
+  sum.textContent = `${failures.length} 个文件失败`;
+  details.appendChild(sum);
+  const ul = document.createElement("ul");
+  for (const f of failures) {
+    const li = document.createElement("li");
+    li.className = "err";
+    li.textContent = `${f.source_path} — ${f.error}`;
+    ul.appendChild(li);
+  }
+  details.appendChild(ul);
+  box.appendChild(details);
+}
+
+// 预填默认值
+api("/api/v1/defaults").then((d) => {
+  $("source").value = d.source_dir;
+  $("output").value = d.output_dir;
+  $("srcLang").value = d.source_language;
+  $("tgtLang").value = d.target_language;
+}).catch(() => {});
+</script>
+</body>
+</html>
