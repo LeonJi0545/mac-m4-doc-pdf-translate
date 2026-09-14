@@ -1,0 +1,9 @@
+# 术语库（方案 §11）。
+# 翻译前按模型官方的术语干预格式拼入 prompt —— 不要自创格式。
+# 只注入当前 chunk 实际命中的术语，不会把整张表塞进去。
+terms:
+  Tenant: 租户
+  Workspace: 工作区
+  Ticket: 工单
+  Billing: 计费
+  Managed Service Provider: 托管服务提供商
