@@ -1,0 +1,41 @@
+[project]
+name = "offline-translator"
+version = "1.0.0"
+description = "Mac mini M4 24GB 完全离线文档翻译系统"
+requires-python = ">=3.12"
+dependencies = [
+    "fastapi",
+    "uvicorn[standard]",
+    "pydantic>=2",
+    "pyyaml",
+    "httpx",
+    "python-docx",
+    "reportlab",
+    "pypdf",
+    "docling",
+]
+
+[project.optional-dependencies]
+dev = ["pytest", "ruff"]
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+include = ["app*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"
+markers = [
+    "needs_docling: 需要真实 Docling（离线开发机上不安装，默认 skip）",
+    "needs_cjk_font: 需要真实中文字体文件",
+]
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "UP", "B"]

@@ -1,0 +1,12 @@
+# 核心运行依赖（离线安装见 scripts/install.sh）
+fastapi
+uvicorn[standard]
+pydantic>=2
+pyyaml
+httpx
+python-docx
+reportlab
+pypdf
+# 文档解析：Docling 体积大且首次运行会联网拉模型，
+# 备料时务必按 §28.1 第 4 步把 ~/.cache/docling 整个固化进 offline-bundle。
+docling

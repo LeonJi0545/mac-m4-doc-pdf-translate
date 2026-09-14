@@ -32,3 +32,30 @@
 **/*.pyc
 .claude/
 .trellis/
+# ── 离线翻译系统运行期目录（内容不入库，保留占位）────────────────
+.venv/
+offline-bundle/
+*.db
+*.db-wal
+*.db-shm
+
+models/*
+!models/.gitkeep
+logs/*
+!logs/.gitkeep
+runtime/*
+!runtime/.gitkeep
+
+# data 下要先放行子目录本身，再排除其内容 ——
+# 父目录被 data/* 排除掉的话，git 无法再反选其中的文件。
+data/*
+!data/.gitkeep
+!data/processing/
+!data/output/
+!data/temp/
+data/processing/*
+data/output/*
+data/temp/*
+!data/processing/.gitkeep
+!data/output/.gitkeep
+!data/temp/.gitkeep

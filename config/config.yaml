@@ -1,0 +1,116 @@
+# Mac mini M4 24GB 完全离线文档翻译系统 —— 配置
+#
+# 本文件是唯一配置入口。所有路径默认按方案 §28.0 的约定：
+#   安装根目录 /Users/Shared/offline-translator
+#   源目录     /Users/Shared/translator/Source
+#   输出目录   /Users/Shared/translator/Translated
+# 用 /Users/Shared 而非 ~/Documents 是为了避开 macOS 的 TCC 保护目录（§17.2）。
+
+server:
+  # 只监听 loopback（§22）。不要改成 0.0.0.0 —— 本系统没有认证，暴露即风险。
+  host: "127.0.0.1"
+  port: 8000
+
+llama:
+  base_url: "http://127.0.0.1:8001"
+  timeout_seconds: 300
+  max_retries: 3
+  # launchd 不保证 api 与 llama 的启动顺序（§28.3），启动时最多等这么久。
+  # 设为 0 表示不等待，由 /api/v1/health 如实反映 llama 未就绪。
+  startup_probe_seconds: 0
+
+model:
+  # ────────────────────────────────────────────────────────────────────────
+  # 必须是本地 .gguf 文件的绝对路径。
+  #
+  # 禁止填 "tencent/HY-MT1.5-1.8B-GGUF:Q4_K_M" 这类 Hugging Face repo id ——
+  # 那是官方示例中 `-hf` 参数的写法，会联网拉取权重，违反方案 §20 的离线要求。
+  # 启动期的离线守卫会直接拒绝这种取值。
+  #
+  # 尺寸选择（§3.2）：先用 1.8B。官方称其翻译质量与 7B 相当，而体积约 1/4，
+  # CPU / 统一内存下速度大致与体积成反比。质量不够再换 7B —— 只改这一行路径，
+  # 架构零改动。
+  #
+  # ⚠ 许可证（§3.3）：HY-MT1.5 采用 Tencent Hunyuan Community License，
+  #   其中明确写明「不适用于欧盟、英国、韩国」。本系统的核心场景是翻译意大利语、
+  #   德语文档，强烈暗示业务涉及欧盟。这是**法务问题，不是技术问题**，须确认后定稿。
+  #   若地域限制构成障碍，可换 Hy-MT2（Apache 2.0，无地域限制，同样提供 GGUF、
+  #   同样支持 it/de/en/zh），切换成本同样只是改这一行路径。
+  # ────────────────────────────────────────────────────────────────────────
+  path: "/Users/Shared/offline-translator/models/hy-mt1.5/HY-MT1.5-1.8B-Q4_K_M.gguf"
+
+sampling:
+  # 官方推荐值（§4.2）。非必要不要改 —— 偏离会降低翻译质量。
+  temperature: 0.7
+  top_k: 20
+  top_p: 0.6
+  repeat_penalty: 1.05
+
+glossary:
+  path: "config/glossary/terms.yaml"
+
+chunking:
+  # 一个翻译 chunk 的字符预算。按文档结构切分（Heading + Paragraph…），不逐句翻译（§10）。
+  max_chars: 1200
+
+doc_conversion:
+  # 旧版 .doc（Word 97-2003 二进制格式）支持（§5.1.1）。
+  # python-docx 只认 OOXML 的 .docx，所以必须先转换。
+  # 关掉它则扫描阶段直接忽略 .doc 文件。
+  enabled: true
+  # LibreOffice headless —— 主方案，保真度高、完全离线、跨平台。
+  soffice_path: "/Applications/LibreOffice.app/Contents/MacOS/soffice"
+  # macOS 内置 textutil —— 兜底方案，零安装，但复杂表格 / 图片保真度低于 LibreOffice。
+  fallback_textutil: true
+  timeout_seconds: 180
+
+pdf:
+  # 扫描件 OCR（§5.2）。
+  ocr: true
+  # ⚠ Docling 默认首次运行时联网拉模型（§28.1 第 4 步的警告）。
+  #   必须提前把缓存目录整个拷进来，并在这里指向本地路径。
+  docling_artifacts_path: "~/.cache/docling"
+
+fonts:
+  # 中文字体（§15）。PDF renderer 显式指定，不依赖系统默认。
+  #
+  # ⚠ ReportLab 的 TTFont 只支持 TrueType 轮廓，**不支持 OTF/CFF**。
+  #   而 "Noto Sans CJK SC" 最常见的发布形态恰好是 .otf —— 直接喂进去会失败。
+  #   所以候选表优先 .ttf（Noto Sans SC），其次 .ttc（需 subfont_index）。
+  #   备料时（§28.1 第 5 步）请取 TTF 或 TTC 发行版，不要只拿 OTF。
+  cjk_candidates:
+    - name: "NotoSansSC"
+      path: "~/Library/Fonts/NotoSansSC-Regular.ttf"
+    - name: "NotoSansSC"
+      path: "/Users/Shared/offline-translator/fonts/NotoSansSC-Regular.ttf"
+    - name: "NotoSansCJKsc"
+      path: "~/Library/Fonts/NotoSansCJK-Regular.ttc"
+      subfont_index: 0
+    - name: "NotoSerifCJKsc"
+      path: "~/Library/Fonts/NotoSerifCJK-Regular.ttc"
+      subfont_index: 0
+    - name: "PingFangSC"
+      path: "/System/Library/Fonts/PingFang.ttc"
+      subfont_index: 0
+
+paths:
+  install_root: "/Users/Shared/offline-translator"
+  data_dir: "data"
+  temp_dir: "data/temp"
+  processing_dir: "data/processing"
+  logs_dir: "logs"
+  db_path: "data/jobs.db"
+
+defaults:
+  # Web UI 的预填值。
+  source_dir: "/Users/Shared/translator/Source"
+  output_dir: "/Users/Shared/translator/Translated"
+  # 源语言仅作记录 —— 官方 prompt 模板里没有源语言槽位（§13），
+  # 实际由模型自动识别，这也是「混合语言自动识别」（§25）能成立的原因。
+  source_language: "auto"
+  target_language: "zh"
+
+logging:
+  level: "INFO"
+  # 只写本地文件（§17 日志本地保存 / §22 禁止 remote logging）。
+  file: "logs/app.log"
