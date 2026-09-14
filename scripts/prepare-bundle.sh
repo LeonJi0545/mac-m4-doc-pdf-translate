@@ -19,7 +19,7 @@ echo "[1/6] Python 依赖 -> wheelhouse"
 # 锁文件必须落进 bundle —— install.sh 在离线机上从 bundle 读它。
 # 只编译到仓库根目录的话，离线机上就没有这个文件，安装会直接失败。
 uv pip compile requirements.in -o "$BUNDLE/requirements.txt"
-uv pip download -r "$BUNDLE/requirements.txt" -d "$BUNDLE/wheels"
+pip3 download -r "$BUNDLE/requirements.txt" -d "$BUNDLE/wheels"
 
 echo "[2/6] llama.cpp（Apple Silicon arm64）"
 if [ ! -d llama.cpp ]; then
@@ -35,7 +35,7 @@ echo "[4/6] Docling / OCR 模型产物"
 # ⚠ 这一步最容易被漏。Docling、OCR 引擎普遍在首次运行时静默联网拉模型，
 #   不提前固化就会在断网环境直接失败，而且报错通常不明显。
 #   必须真跑一次完整解析，把缓存目录整个拷进 bundle。
-python - <<'PY'
+python3 - <<'PY'
 from pathlib import Path
 from docling.document_converter import DocumentConverter
 sample = Path("sample.pdf")

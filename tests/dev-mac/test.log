@@ -1,0 +1,4 @@
+/Users/uumac1/yg-doc/input/01_German_Business_Operations_Test_ZH_REFERENCE.pdf — ParseError: PDF 解析失败 (/Users/uumac1/yg-doc/input/01_German_Business_Operations_Test_ZH_REFERENCE.pdf): Model 'docling-project/docling-layout-heron' not found in artifacts_path. Expected location: /Users/uumac1/.cache/docling/docling-project--docling-layout-heron Available models in /Users/uumac1/.cache/docling: RapidOcr To fix this issue: 1. Download the model: docling-tools models download-hf-repo docling-project/docling-layout-heron 2. Or remove --artifacts-path to enable auto-download 3. Or use a different model that exists in your artifacts_path
+
+
+/Users/uumac1/yg-doc/input/01_German_Business_Operations_Test_ZH_REFERENCE.pdf — ParseError: PDF 解析失败 (/Users/uumac1/yg-doc/input/01_German_Business_Operations_Test_ZH_REFERENCE.pdf): Image processor config not found: /Users/uumac1/.cache/docling/docling-project--docling-layout-heron/preprocessor_config.json

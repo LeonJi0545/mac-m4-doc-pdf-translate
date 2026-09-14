@@ -1,0 +1,19 @@
+Script started on Mon Sep 14 18:43:29 2026
+/Users/uumac1/.zshrc:source:14: no such file or directory: /Users/uumac1/.openclaw/completions/openclaw.zsh
+[1m[7m%[27m[1m[0m                                                                                                                                [0m[27m[24m[Juumac1@uumac1deMac-mini mac-m4-doc-pdf-translate % [K[?2004hccd scripts[1m/[0m[0m [?2004l
+[1m[7m%[27m[1m[0m                                                                                                                                [0m[27m[24m[Juumac1@uumac1deMac-mini scripts % [K[?2004hhhel alth h.sh[?2004l
+zsh: command not found: health.sh
+[1m[7m%[27m[1m[0m                                                                                                                                [0m[27m[24m[Juumac1@uumac1deMac-mini scripts % [K[?2004hn bbash health.sh[?2004l
+both services OK
+[1m[7m%[27m[1m[0m                                                                                                                                [0m[27m[24m[Juumac1@uumac1deMac-mini scripts % [K[?2004h''/Users/uumac1/yg-doc/mac-m4-doc-pdf-translate/scripts/health.sh'[?2004l
+both services OK
+[1m[7m%[27m[1m[0m                                                                                                                                [0m[27m[24m[Juumac1@uumac1deMac-mini scripts % [K[?2004h''/Users/uumac1/yg-doc/mac-m4-doc-pdf-translate/scripts/start.sh'[?2004l
+Load failed: 5: Input/output error
+Try running `launchctl bootstrap` as root for richer errors.
+Load failed: 5: Input/output error
+Try running `launchctl bootstrap` as root for richer errors.
+23623	0	com.offline-translator.api
+23621	0	com.offline-translator.llama
+已加载。注意 launchd 不保证启动顺序，api 可能先于 llama-server 起来 ——
+这是预期行为，/api/v1/health 会如实返回 503 直到 llama-server 就绪。
+[1m[7m%[27m[1m[0m                                                                                                                                [0m[27m[24m[Juumac1@uumac1deMac-mini scripts % [K[?2004h
