@@ -15,8 +15,12 @@ mkdir -p "$ROOT"/{models,data/{processing,output,temp},config,logs,runtime}
 echo "[1/6] 拷贝应用代码"
 cp -R "$REPO_DIR/app"    "$ROOT/"
 cp -R "$REPO_DIR/config" "$ROOT/"
-cp    "$REPO_DIR/requirements.in" "$ROOT/" 2>/dev/null || true
-[ -f "$REPO_DIR/requirements.txt" ] && cp "$REPO_DIR/requirements.txt" "$ROOT/"
+# 锁文件来自 bundle（由 prepare-bundle.sh 在联网机上编译），不是仓库
+[ -f "$BUNDLE/requirements.txt" ] || {
+  echo "找不到 $BUNDLE/requirements.txt —— 该文件由 prepare-bundle.sh 生成，请确认 bundle 完整" >&2
+  exit 1
+}
+cp "$BUNDLE/requirements.txt" "$ROOT/"
 
 echo "[2/6] Python 环境（全程离线）"
 uv venv "$ROOT/.venv"

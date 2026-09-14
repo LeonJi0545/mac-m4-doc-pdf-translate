@@ -5,6 +5,8 @@
 
 实现依据：[`mac-mini-m4-24gb-offline-document-translator-HYMT-llamacpp.md`](mac-mini-m4-24gb-offline-document-translator-HYMT-llamacpp.md)（以下 §N 均指该方案的章节）。
 
+> **要动手部署，看 [`docs/IMPLEMENTATION.md`](docs/IMPLEMENTATION.md)** —— 从 clone 到可用的完整操作手册，含排障与卸载。本文只讲架构与验收状态。
+
 > **一个模型、一个推理 Runtime、一个业务服务、一个本地数据库。**
 > **目录 → 解析 → HY-MT1.5 → 输出。**
 
@@ -48,6 +50,8 @@ Web UI ──> FastAPI (127.0.0.1:8000) ──> JobRunner ──> pipeline
 ---
 
 ## 部署（macOS，完全离线）
+
+> 下面是流程概览。**逐步操作手册见 [`docs/IMPLEMENTATION.md`](docs/IMPLEMENTATION.md)。**
 
 严格按 §28.6 的顺序：
 

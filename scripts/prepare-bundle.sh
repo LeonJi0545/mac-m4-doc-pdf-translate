@@ -16,8 +16,10 @@ MODEL_REPO="${MODEL_REPO:-tencent/HY-MT1.5-1.8B-GGUF}"
 mkdir -p "$BUNDLE"/{wheels,llama,models,fonts,docling,libreoffice}
 
 echo "[1/6] Python 依赖 -> wheelhouse"
-uv pip compile requirements.in -o requirements.txt
-uv pip download -r requirements.txt -d "$BUNDLE/wheels"
+# 锁文件必须落进 bundle —— install.sh 在离线机上从 bundle 读它。
+# 只编译到仓库根目录的话，离线机上就没有这个文件，安装会直接失败。
+uv pip compile requirements.in -o "$BUNDLE/requirements.txt"
+uv pip download -r "$BUNDLE/requirements.txt" -d "$BUNDLE/wheels"
 
 echo "[2/6] llama.cpp（Apple Silicon arm64）"
 if [ ! -d llama.cpp ]; then
