@@ -179,6 +179,37 @@ def test_prepare_bundle_downloads_artifacts_explicitly() -> None:
     assert "artifacts_path" in text
 
 
+def test_wheelhouse_python_version_handoff_is_closed() -> None:
+    """wheel 是按 cp3XX 打的，两边的 Python 小版本必须对上。
+
+    备料写 python-version、安装照它建 venv。不钉的话 uv 会在 B 机上自己挑一个，
+    挑到别的小版本就是 --no-index 下「找不到匹配 wheel」，而那台机器没法上网补。
+    A/B 同机时这个坑碰巧不发作，换台真 B 机就翻车。
+    """
+    prepare = (SCRIPTS_DIR / "prepare-bundle.sh").read_text(encoding="utf-8")
+    install = (SCRIPTS_DIR / "install.sh").read_text(encoding="utf-8")
+    assert '"$BUNDLE/python-version"' in prepare, "备料脚本应把 Python 版本写进 bundle"
+    assert '"$BUNDLE/python-version"' in install, "安装脚本应从 bundle 读 Python 版本"
+    assert 'uv venv --python "$PY_VERSION"' in install
+
+
+def test_prepare_bundle_does_not_depend_on_system_docling() -> None:
+    """实机回归：A 机的系统 python3 没装 docling，第 4 步当场 ModuleNotFoundError。
+
+    改成用第 1 步刚下好的 wheelhouse 现建一个环境 —— 既不挑 A 机装了什么，
+    下模型的 docling 版本也和 B 机跑的那份完全一致。
+    """
+    text = (SCRIPTS_DIR / "prepare-bundle.sh").read_text(encoding="utf-8")
+    block = text[text.index("[4/6]"):text.index("[5/6]")]
+    assert "$TOOLS_VENV" in block
+    assert '--find-links "$BUNDLE/wheels"' in block
+    # 第 4 步不得再直接使唤系统 python3
+    code = "\n".join(
+        ln for ln in block.splitlines() if not ln.lstrip().startswith("#")
+    )
+    assert "python3 -" not in code
+
+
 def test_install_uses_offline_flags() -> None:
     """方案 §28.2：不带 --offline --no-index 的话 uv 会静默回落到 PyPI。"""
     text = (SCRIPTS_DIR / "install.sh").read_text(encoding="utf-8")

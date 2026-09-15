@@ -59,3 +59,7 @@ data/temp/*
 !data/processing/.gitkeep
 !data/output/.gitkeep
 !data/temp/.gitkeep
+
+# 备料脚本的临时工具环境（scripts/prepare-bundle.sh）
+.prepare-venv/
+offline-bundle/

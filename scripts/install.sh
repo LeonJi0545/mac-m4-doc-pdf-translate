@@ -49,7 +49,18 @@ fi
 cp "$BUNDLE/requirements.txt" "$ROOT/"
 
 echo "[2/8] Python 环境（全程离线）"
-uv venv "$ROOT/.venv"
+# wheel 是按 cp3XX 打的：venv 的 Python 小版本必须和备料机一致，
+# 否则 --no-index 下会「找不到任何匹配的 wheel」，而这台机器没法上网补。
+# 不钉版本的话 uv 会自己挑一个 —— A/B 同机时碰巧对上，换台机器就翻车。
+if [ -f "$BUNDLE/python-version" ]; then
+  PY_VERSION="$(cat "$BUNDLE/python-version")"
+  echo "    按 bundle 的记录建 Python $PY_VERSION 环境"
+  uv venv --python "$PY_VERSION" "$ROOT/.venv"
+else
+  echo "⚠ $BUNDLE 里没有 python-version（旧版 bundle）。" >&2
+  echo "  venv 的 Python 版本将由 uv 自行决定，与 wheelhouse 对不上就会装不上。" >&2
+  uv venv "$ROOT/.venv"
+fi
 # ⚠ --offline --no-index 必须带上。不带的话 uv 会静默回落到 PyPI，
 #   那就不是离线安装了（方案 §28.2 的明确警告）。
 uv pip install --python "$ROOT/.venv/bin/python" \

@@ -77,6 +77,13 @@ cd mac-m4-doc-pdf-translate
 | `cmake` | 同上 | `brew install cmake` |
 | `hf`（huggingface-cli） | 下载模型权重 | `pip install -U "huggingface_hub[cli]"` |
 
+**不需要**在 A 机手装 docling。第 4 步会用第 1 步刚下好的 wheelhouse 现建一个临时环境
+（`.prepare-venv/`），模型就由那份 docling 下载 —— 和 B 机将来跑的是同一个版本。
+
+> ⚠ 用哪个 `python3` 备料，B 机就得建同一个小版本的 venv：wheel 是按 `cp3XX` 打的。
+> 脚本会把版本写进 `offline-bundle/python-version`，`install.sh` 照它建 venv。
+> 要指定别的解释器就 `PY_BIN=/path/to/python3.12 ./scripts/prepare-bundle.sh`。
+
 确认：
 
 ```bash
@@ -106,6 +113,7 @@ python3 --version && uv --version && cmake --version && hf version
 ```text
 offline-bundle/
 ├── requirements.txt      # 依赖锁（install.sh 从这里读，不是从仓库读）
+├── python-version        # 备料用的 Python 小版本，install.sh 照它建 venv
 ├── wheels/               # 全部 Python 依赖的 wheel
 ├── llama/llama-server    # 编译好的 arm64 二进制
 ├── models/hy-mt1.5/      # GGUF 权重
@@ -422,6 +430,8 @@ terms:
 | `模型文件不存在` | 路径拼错，或 GGUF 文件名与默认值不符 | `ls` 确认实际文件名后改 `config.yaml` |
 | `llama-server 地址 必须指向本机 loopback` | `base_url` 被改成了外网地址 | 改回 `http://127.0.0.1:8001` |
 | `配置文件不存在` | `OFFLINE_TRANSLATOR_CONFIG` 指错了 | 检查 api plist 里的该环境变量 |
+| `ModuleNotFoundError: No module named 'docling'`（跑备料脚本时） | 旧版第 4 步直接使唤系统 `python3`，而 A 机未必装了 docling | 已修：现在从 wheelhouse 现建临时环境。若仍看到，说明跑的是旧脚本 |
+| `No solution found` / 找不到匹配的 wheel（B 机安装时） | venv 的 Python 小版本和 wheelhouse 对不上 | 看 `cat offline-bundle/python-version`，确认 B 机装了该小版本的 Python；旧 bundle 没有这个文件，重跑备料即可 |
 | `Load failed: 5: Input/output error` | 旧版 `start.sh` 用的 `launchctl load`，服务已加载时就报这个，**而且仍返回 0** | 已修：现在用 `bootstrap` / `bootout`。若仍看到，说明跑的是旧脚本 |
 | `Bootstrap failed: 37: Operation already in progress` | 上一次 `bootout` 还没落地 | `start.sh` 已会等待；手工操作时 `launchctl print gui/$(id -u)/com.offline-translator.llama` 确认消失后再来 |
 
