@@ -32,6 +32,15 @@ cp -R "$REPO_DIR/app/." "$ROOT/app/"
   fi
 done
 
+# 保留旧配置是对的（不能冲掉运维填的 model.path），但「旧配置里有必须跟进的键」
+# 是个真实风险：pdf.docling_artifacts_path 就是这么留在 ~/.cache/docling 上的。
+if [ -n "$(find "$ROOT/config" -name '*.new' 2>/dev/null)" ]; then
+  echo "⚠ 保留了现有配置，仓库新版落成了 .new 文件："
+  find "$ROOT/config" -name '*.new' | sed 's/^/    /'
+  echo "  新版可能改了必须跟进的键（例如 pdf.docling_artifacts_path）。"
+  echo "  第 8 步的离线自检会用**部署中的**那份配置真跑一遍，指错了会在那里失败。"
+fi
+
 # 锁文件来自 bundle（由 prepare-bundle.sh 在联网机上编译），不是仓库
 [ -f "$BUNDLE/requirements.txt" ] || {
   echo "找不到 $BUNDLE/requirements.txt —— 该文件由 prepare-bundle.sh 生成，请确认 bundle 完整" >&2
@@ -102,35 +111,39 @@ echo "[7/8] 源目录与输出目录"
 mkdir -p /Users/Shared/translator/{Source,Translated}
 
 echo "[8/8] 离线自检：真跑一次 PDF 解析"
-# 「模型有没有完整拷过来」必须在安装时就有结论。
-# 靠肉眼看 ls 看不出缺哪个模型 —— test.log 那次就是装完看着正常，
-# 直到跑第一份真实文档才炸。这里用 bundle 里的 sample.pdf 当场验一遍。
+# 「模型有没有完整拷过来、配置有没有指对地方」必须在安装时就有结论。
+#
+# ⚠ 这里**必须走部署中的那份 config.yaml 和 app 自己的解析入口**，不能拿
+#   $ROOT/models/docling 硬编码去验。第一版就是硬编码的，结果：重跑 install.sh
+#   会保留旧 config.yaml（见第 1 步），旧值还指着 ~/.cache/docling；
+#   自检验的是新目录、服务读的是旧配置，自检通过、跑第一份 PDF 照炸。
 if [ "${SKIP_VERIFY:-0}" = "1" ]; then
   echo "    已按 SKIP_VERIFY=1 跳过 —— 请务必在 §28.5 断网验收时补上"
-elif [ ! -f "$BUNDLE/sample.pdf" ]; then
-  echo "⚠ bundle 里没有 sample.pdf，跳过自检。请重跑 prepare-bundle.sh（§28.1）补上。" >&2
 else
-  DOCLING_ARTIFACTS_PATH="$ROOT/models/docling" \
-  HF_HUB_OFFLINE=1 TRANSFORMERS_OFFLINE=1 HF_DATASETS_OFFLINE=1 \
-  "$ROOT/.venv/bin/python" - "$ROOT/models/docling" "$BUNDLE/sample.pdf" <<'PY'
+  [ -f "$BUNDLE/sample.pdf" ] || {
+    echo "找不到 $BUNDLE/sample.pdf。" >&2
+    echo "这说明 bundle 是旧版 prepare-bundle.sh 产出的 —— 那一版没有显式下载 Docling" >&2
+    echo "模型，artifacts 很可能就是残的（症状：layout-heron 缺 preprocessor_config.json）。" >&2
+    echo "请在联网机上重跑 scripts/prepare-bundle.sh（§28.1），再回来安装。" >&2
+    exit 1
+  }
+  OFFLINE_TRANSLATOR_CONFIG="$ROOT/config/config.yaml" PYTHONPATH="$ROOT"   "$ROOT/.venv/bin/python" - "$BUNDLE/sample.pdf" <<'PY'
+import os
 import sys
 from pathlib import Path
 
-from docling.datamodel.base_models import InputFormat
-from docling.datamodel.pipeline_options import PdfPipelineOptions
-from docling.document_converter import DocumentConverter, PdfFormatOption
+from app.core.config import Settings
+from app.core.offline import apply_offline_guard
 
-artifacts, sample = Path(sys.argv[1]), Path(sys.argv[2])
+cfg = Settings.load(os.environ["OFFLINE_TRANSLATOR_CONFIG"])
+# 与 app/main.py 同序：离线守卫必须在 import docling 之前写环境变量
+apply_offline_guard(cfg.pdf.docling_artifacts_path)
 
-options = PdfPipelineOptions()
-options.do_ocr = True
-options.do_table_structure = True
-options.artifacts_path = str(artifacts)
+from app.document.pdf_reader import parse_pdf  # noqa: E402
 
-result = DocumentConverter(
-    format_options={InputFormat.PDF: PdfFormatOption(pipeline_options=options)}
-).convert(str(sample))
-print(f"    通过：离线解析出 {len(list(result.document.iterate_items()))} 个 item")
+print(f"    artifacts: {cfg.pdf.docling_artifacts_path}")
+parsed = parse_pdf(Path(sys.argv[1]), cfg)
+print(f"    通过：离线解析出 {len(parsed.blocks)} 个 block")
 PY
 fi
 

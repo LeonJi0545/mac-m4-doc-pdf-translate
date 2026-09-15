@@ -207,6 +207,77 @@ def test_missing_docling_artifacts_fails_loudly(tmp_settings: Settings) -> None:
     assert "§28.1" in str(exc.value)
 
 
+def test_hf_object_store_layout_is_rejected(tmp_settings: Settings,
+                                            tmp_path: Path) -> None:
+    """实机回归第三轮 —— 目录形状不对，不是文件损坏。
+
+    `docling-tools models download-hf-repo`（docling 自己报错时给的第 1 条建议）
+    产出的是 HF 的对象存储布局：<org>--<repo>/{blobs,refs,snapshots,trees}。
+    docling 按平铺路径去找，报的是
+    "Image processor config not found: .../preprocessor_config.json" —— 看着像
+    文件损坏，实际是形状不对。要平铺那份得用 `docling-tools models download -o`。
+    """
+    from app.document.pdf_reader import _resolve_artifacts_path
+
+    artifacts = tmp_path / "docling"
+    repo = artifacts / "docling-project--docling-layout-heron"
+    for sub in ("blobs", "refs", "snapshots", "trees"):
+        (repo / sub).mkdir(parents=True)
+
+    cfg = tmp_settings.model_copy(deep=True)
+    cfg.pdf.docling_artifacts_path = str(artifacts)
+
+    with pytest.raises(ParseError) as exc:
+        _resolve_artifacts_path(cfg)
+    assert "blobs/refs/snapshots" in str(exc.value)
+    assert "download-hf-repo" in str(exc.value)
+
+
+def test_prepare_bundle_checks_artifact_shape() -> None:
+    """备料期就该拦下这个形状，而不是等 B 机解析第一份 PDF。"""
+    text = Path("scripts/prepare-bundle.sh").read_text(encoding="utf-8")
+    assert "blobs" in text and "snapshots" in text
+
+
+def test_docling_cache_root_is_rejected_even_when_populated(
+    tmp_settings: Settings, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """实机回归第二轮。
+
+    ~/.cache/docling 是个**非空但错误**的取值 —— 底下是 models/ 加各 OCR 引擎目录，
+    不是 artifacts 要的 <org>--<repo> 布局。只判「目录非空」拦不住它，
+    实际报错会变成 layout-heron 缺 preprocessor_config.json，离病因隔着两层。
+    """
+    from app.document.pdf_reader import _resolve_artifacts_path
+
+    home = tmp_path / "home"
+    cache_root = home / ".cache" / "docling"
+    (cache_root / "RapidOcr").mkdir(parents=True)
+    monkeypatch.setattr(Path, "home", classmethod(lambda cls: home))
+
+    cfg = tmp_settings.model_copy(deep=True)
+    cfg.pdf.docling_artifacts_path = str(cache_root)
+
+    with pytest.raises(ParseError) as exc:
+        _resolve_artifacts_path(cfg)
+    assert "cache 根目录" in str(exc.value)
+    assert "models/docling" in str(exc.value)
+
+
+def test_install_selfcheck_uses_the_deployed_config() -> None:
+    """自检必须走部署中的 config.yaml，不能拿路径硬编码去验。
+
+    硬编码的自检验的是新目录、服务读的是旧配置 —— 自检通过、跑第一份 PDF 照炸，
+    实机第二轮就是这么复现的。
+    """
+    install = Path("scripts/install.sh").read_text(encoding="utf-8")
+    block = install[install.index("[8/8]"):]
+    assert 'OFFLINE_TRANSLATOR_CONFIG="$ROOT/config/config.yaml"' in block
+    assert "Settings.load" in block
+    assert "parse_pdf" in block
+    assert 'DOCLING_ARTIFACTS_PATH="$ROOT/models/docling"' not in block
+
+
 def test_empty_docling_artifacts_dir_is_also_rejected(tmp_settings: Settings,
                                                       tmp_path: Path) -> None:
     """目录存在但是空的同样不算数 —— install.sh 建了目录却没拷进去就是这个形态。"""

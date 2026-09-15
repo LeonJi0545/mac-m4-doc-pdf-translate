@@ -206,6 +206,12 @@ MODEL_FILE=HY-MT1.5-1.8B-Q4_K_M.gguf ./scripts/install.sh /path/to/offline-bundl
 重复执行是安全的：`config/` 下已存在的文件（`config.yaml`、术语库）不会被覆盖，
 仓库里的新版会落成同名 `.new` 文件等你自己比对。
 
+> ⚠ 但「保留旧配置」有个反面：新版若改了**必须跟进**的键，旧值会静静留着。
+> `pdf.docling_artifacts_path` 就这么栽过一次 —— 新 artifacts 铺到了
+> `$ROOT/models/docling`，服务却还照旧配置去读 `~/.cache/docling`，装完看着成功、
+> 跑第一份 PDF 才炸。出现 `.new` 文件时脚本会提醒你，第 8 步的自检也会用
+> **部署中的那份配置**真跑一遍，指错了在那里就会失败。
+
 ### 4.2 确认安装
 
 ```bash
@@ -429,7 +435,7 @@ terms:
 | PDF 全部失败，提示 `未安装 docling` | bundle 的 docling 没装上 | 回到 §4.2 确认依赖完整 |
 | `Docling 模型目录不存在或为空` | `pdf.docling_artifacts_path` 指向的目录没铺上 | 按 §4.3 核对路径；确认 `ls /Users/Shared/offline-translator/models/docling` 有 `<org>--<repo>` 子目录 |
 | `Model 'docling-project/docling-layout-heron' not found in artifacts_path`<br>`Available models in ...: RapidOcr` | 路径填成了 Docling 的 cache 根目录，或备料时只拷了缓存没显式下载 | 改 §4.3 的路径；若 bundle 本身就缺，回 A 机重跑 `prepare-bundle.sh` 第 4 步（新版会当场验收） |
-| `Image processor config not found: .../preprocessor_config.json` | 模型目录在、文件不全 —— 多半是拷了 Hugging Face 的符号链接树，到 B 机变成断链 | 回 A 机重跑第 4 步；新版脚本会检出符号链接并直接报错 |
+| `Image processor config not found: .../preprocessor_config.json` | **目录形状不对，不是文件损坏。** `<org>--<repo>/` 底下是 `blobs/ refs/ snapshots/ trees/`(HF 的对象存储)，而 docling 要的是平铺的 `config.json` / `preprocessor_config.json` / 权重。这正是 `docling-tools models download-hf-repo`(docling 报错里给的第 1 条建议)的产出 —— **照它的提示修，修不好** | 用 `docling-tools models download -o <artifacts 目录>` 重下；另查 `pdf.docling_artifacts_path` 是否还指着 `~/.cache/docling`。新版在备料、安装、运行三处都会拦下这个形状 |
 | 扫描件 PDF 失败但普通 PDF 正常 | OCR 模型没备进 bundle | A 机上用**含扫描页**的 sample.pdf 重跑第 4 步 |
 
 ### 跑着跑着停了 / 结果不对

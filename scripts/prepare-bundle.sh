@@ -86,6 +86,17 @@ if [ -n "$links" ]; then
   exit 1
 fi
 
+# 形状自检：每个 <org>--<repo> 目录底下必须是平铺的模型文件，
+# 而不是 HF 的 blobs/refs/snapshots 对象存储。后者是 `download-hf-repo` 的产出，
+# docling 按平铺路径去找会报 "Image processor config not found"，看着像文件损坏。
+for repo_dir in "$ARTIFACTS"/*/; do
+  if [ -d "$repo_dir/blobs" ] && [ -d "$repo_dir/snapshots" ]; then
+    echo "⚠ $repo_dir 是 HF 缓存布局（blobs/refs/snapshots），不是平铺快照。" >&2
+    echo '  请确认用的是 docling-tools models download -o，而不是 download-hf-repo。' >&2
+    exit 1
+  fi
+done
+
 echo "    ② 断网语义下真跑一次解析（验收）"
 # ⚠ sample.pdf **必须含扫描页**，否则 OCR 引擎的模型不会被触发，
 #   B 机处理扫描件时才会失败。

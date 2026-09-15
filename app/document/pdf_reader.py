@@ -42,6 +42,30 @@ _LABEL_MAP = {
 }
 
 
+def _assert_flat_snapshots(artifacts: Path) -> None:
+    """拦下 Hugging Face 的对象存储布局。
+
+    docling 要的是 ``<org>--<repo>/`` 底下**直接**躺着 ``config.json`` /
+    ``preprocessor_config.json`` / 权重文件。而 ``blobs/ refs/ snapshots/`` 那一套是
+    HF 的缓存布局，文件都藏在 ``snapshots/<rev>/`` 里 —— docling 按平铺路径去找，
+    报出来的是 ``Image processor config not found: .../preprocessor_config.json``，
+    看着像"文件损坏"，实际是目录形状不对。
+
+    实机上 ``docling-tools models download-hf-repo``（正是 docling 自己报错时给的建议）
+    产出的就是这个形状。要平铺的那份得用 ``docling-tools models download -o <dir>``。
+    """
+    if not artifacts.is_dir():
+        return
+    for repo_dir in sorted(d for d in artifacts.iterdir() if d.is_dir()):
+        if (repo_dir / "blobs").is_dir() and (repo_dir / "snapshots").is_dir():
+            raise ParseError(
+                f"{repo_dir} 是 Hugging Face 的缓存布局（blobs/refs/snapshots），"
+                "不是 docling 要的平铺模型快照。"
+                "请用 `docling-tools models download -o <artifacts 目录>` 重新下载"
+                "（注意不是 `download-hf-repo`，后者产出的正是这个错误形状）。"
+            )
+
+
 def _resolve_artifacts_path(settings: Settings) -> str:
     """校验 Docling 的 artifacts 目录，返回给 pipeline option 用。
 
@@ -54,6 +78,19 @@ def _resolve_artifacts_path(settings: Settings) -> str:
     ``Model 'docling-project/docling-layout-heron' not found in artifacts_path``。
     """
     artifacts = Path(settings.pdf.docling_artifacts_path)
+
+    # Docling 的 cache 根目录是个**非空但错误**的取值：它底下是 `models/` 加各 OCR
+    # 引擎自己的目录，不是 artifacts 要的 `<org>--<repo>` 布局。光判「目录非空」拦不住，
+    # 得到的报错会是 layout-heron 缺 preprocessor_config.json 之类，跟真正的病因隔着两层。
+    if artifacts == Path.home() / ".cache" / "docling":
+        raise ParseError(
+            f"pdf.docling_artifacts_path 指向的是 Docling 的 cache 根目录（{artifacts}），"
+            "不是 artifacts 目录。install.sh 会把 artifacts 铺到 "
+            "<INSTALL_ROOT>/models/docling，请把配置改成那个路径。"
+        )
+
+    _assert_flat_snapshots(artifacts)
+
     if not artifacts.is_dir() or not any(artifacts.iterdir()):
         raise ParseError(
             f"Docling 模型目录不存在或为空: {artifacts}。"
