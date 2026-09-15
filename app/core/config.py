@@ -91,8 +91,10 @@ class DocConversionSettings(BaseModel):
 
 class PdfSettings(BaseModel):
     ocr: bool = True
-    # Docling 默认首次运行时联网拉模型（方案 §28.1 第 4 步的警告），必须指向本地缓存。
-    docling_artifacts_path: str = "~/.cache/docling"
+    # Docling 默认首次运行时联网拉模型（方案 §28.1 第 4 步的警告），必须指向本地目录。
+    # 填的是 **artifacts 目录**（一个模型一个 `<org>--<repo>` 子目录），
+    # 不是 Docling 的 cache 根目录 —— 两者填反的实机报错见 tests/dev-mac/test.log。
+    docling_artifacts_path: str = "/Users/Shared/offline-translator/models/docling"
 
     @field_validator("docling_artifacts_path")
     @classmethod

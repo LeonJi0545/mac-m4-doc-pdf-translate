@@ -133,6 +133,52 @@ def test_script_has_strict_mode(name: str) -> None:
     assert "set -euo pipefail" in text
 
 
+@pytest.mark.parametrize(
+    ("script", "modern", "legacy"),
+    [("start.sh", "launchctl bootstrap", "launchctl load"),
+     ("stop.sh", "launchctl bootout", "launchctl unload")],
+)
+def test_launchctl_uses_modern_api(script: str, modern: str, legacy: str) -> None:
+    """实机回归（typescript / tests/dev-mac）。
+
+    `launchctl load -w` 在服务已加载时只打 "Load failed: 5: Input/output error"
+    却仍返回 0 —— start.sh 照样打印「已加载」，报错被吞掉、脚本谎报成功。
+    """
+    code = "\n".join(
+        ln for ln in (SCRIPTS_DIR / script).read_text(encoding="utf-8").splitlines()
+        if not ln.lstrip().startswith("#")
+    )
+    assert modern in code
+    assert legacy not in code
+
+
+def test_start_script_verifies_instead_of_claiming_success() -> None:
+    """start.sh 必须真的去确认服务起来了，而不是 bootstrap 完就宣布成功。"""
+    code = (SCRIPTS_DIR / "start.sh").read_text(encoding="utf-8")
+    assert "health.sh" in code
+
+
+def test_install_materialises_docling_artifacts() -> None:
+    """§28.2 第 4 步：artifacts 必须铺到 config 指向的那个目录。"""
+    import yaml
+
+    install = (SCRIPTS_DIR / "install.sh").read_text(encoding="utf-8")
+    configured = yaml.safe_load(
+        Path("config/config.yaml").read_text(encoding="utf-8")
+    )["pdf"]["docling_artifacts_path"]
+    tail = configured.replace("/Users/Shared/offline-translator/", "")
+    assert f'"$ROOT/{tail}/"' in install, f"install.sh 没有把 docling artifacts 铺到 {configured}"
+
+
+def test_prepare_bundle_downloads_artifacts_explicitly() -> None:
+    """不能再靠「跑一次 convert 捡缓存」—— 那次捡到的缓存里没有 layout 模型。"""
+    text = (SCRIPTS_DIR / "prepare-bundle.sh").read_text(encoding="utf-8")
+    assert "docling-tools models download" in text or "download_models" in text
+    # 带 artifacts_path + HF 离线开关的验收跑，是「模型齐不齐」的唯一硬判据
+    assert "HF_HUB_OFFLINE=1" in text
+    assert "artifacts_path" in text
+
+
 def test_install_uses_offline_flags() -> None:
     """方案 §28.2：不带 --offline --no-index 的话 uv 会静默回落到 PyPI。"""
     text = (SCRIPTS_DIR / "install.sh").read_text(encoding="utf-8")

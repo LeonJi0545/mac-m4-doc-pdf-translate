@@ -42,6 +42,29 @@ _LABEL_MAP = {
 }
 
 
+def _resolve_artifacts_path(settings: Settings) -> str:
+    """校验 Docling 的 artifacts 目录，返回给 pipeline option 用。
+
+    ⚠ 目录不存在时**不能**放任 ``artifacts_path`` 为空。那等于回落到 Docling 的
+    「首次运行时联网下载」，在断网机上得到的是一条跟真正原因无关的报错
+    （实机记录见 ``tests/dev-mac/test.log``）。这里直接拦下，把问题指回备料/安装环节。
+
+    artifacts 目录的形态是「一个模型一个 ``<org>--<repo>`` 子目录」，
+    **不是** Docling 的 cache 根目录（``~/.cache/docling``）。两者填反的报错是
+    ``Model 'docling-project/docling-layout-heron' not found in artifacts_path``。
+    """
+    artifacts = Path(settings.pdf.docling_artifacts_path)
+    if not artifacts.is_dir() or not any(artifacts.iterdir()):
+        raise ParseError(
+            f"Docling 模型目录不存在或为空: {artifacts}。"
+            "本系统不会在运行期联网下载模型（方案 §20）。"
+            "请按 §28.1 第 4 步把模型下载进 offline-bundle/docling/，再按 §28.2 安装；"
+            "config.yaml 的 pdf.docling_artifacts_path 要指向存放各模型子目录的 "
+            "artifacts 目录本身，而不是 Docling 的 cache 根目录。"
+        )
+    return str(artifacts)
+
+
 def _build_converter(settings: Settings) -> Any:
     """构造真实的 Docling converter。只在没有注入时才走这里。"""
     try:
@@ -59,9 +82,7 @@ def _build_converter(settings: Settings) -> Any:
     options.do_ocr = settings.pdf.ocr
     options.do_table_structure = True
     # 指向本地 artifacts，杜绝运行期联网拉模型（方案 §20 / §28.1 的警告）
-    artifacts = Path(settings.pdf.docling_artifacts_path)
-    if artifacts.exists():
-        options.artifacts_path = str(artifacts)
+    options.artifacts_path = _resolve_artifacts_path(settings)
 
     return DocumentConverter(
         format_options={InputFormat.PDF: PdfFormatOption(pipeline_options=options)}

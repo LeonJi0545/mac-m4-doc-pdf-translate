@@ -68,8 +68,18 @@ pdf:
   # 扫描件 OCR（§5.2）。
   ocr: true
   # ⚠ Docling 默认首次运行时联网拉模型（§28.1 第 4 步的警告）。
-  #   必须提前把缓存目录整个拷进来，并在这里指向本地路径。
-  docling_artifacts_path: "~/.cache/docling"
+  #   必须提前把模型下载进 offline-bundle，并在这里指向本地目录。
+  #
+  # ⚠ 这里要填的是 **artifacts 目录**——里面一个模型一个 `<org>--<repo>` 子目录，
+  #   例如 `docling-project--docling-layout-heron/`。
+  #   **不要**填 Docling 的 cache 根目录（`~/.cache/docling`）：那里通常只有 OCR 引擎
+  #   自己下的那一份，layout / tableformer 在 Hugging Face 缓存里，于是解析时报
+  #   "Model 'docling-project/docling-layout-heron' not found in artifacts_path"
+  #   （实机记录见 tests/dev-mac/test.log）。
+  #
+  #   放 /Users/Shared/... 而非 ~/.cache/... 还有一层理由：~/.cache 语义上随时可删，
+  #   而这份产物在断网机上重建不了。install.sh 会把它铺到这个路径。
+  docling_artifacts_path: "/Users/Shared/offline-translator/models/docling"
 
 fonts:
   # 中文字体（§15）。PDF renderer 显式指定，不依赖系统默认。

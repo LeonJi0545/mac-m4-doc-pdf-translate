@@ -6,6 +6,9 @@
 # ─────────────────────────────────────────────────────────────────────────────
 set -euo pipefail
 
+ROOT="${INSTALL_ROOT:-/Users/Shared/offline-translator}"
+HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
 cat <<'TXT'
 断网验收清单（逐条人工确认）：
 
@@ -32,10 +35,19 @@ echo "服务："
 launchctl list 2>/dev/null | grep offline-translator || echo "  （未加载）"
 
 echo "健康："
-"$(dirname "${BASH_SOURCE[0]}")/health.sh" || true
+"$HERE/health.sh" || true
+
+# Docling 的 artifacts 目录 —— tests/dev-mac/test.log 那次就死在这里：
+# 目录看着在，里面缺 layout 模型，直到解析第一份 PDF 才报错。
+echo "Docling artifacts（$ROOT/models/docling）："
+if [ -d "$ROOT/models/docling" ] && [ -n "$(ls -A "$ROOT/models/docling" 2>/dev/null || true)" ]; then
+  ls -1 "$ROOT/models/docling" | sed 's/^/  /'
+else
+  echo "  ⚠ 缺失或为空 —— PDF 解析必炸，见 §28.2 第 4 步"
+fi
 
 echo "出站连接（应为空）："
-if lsof -i -P 2>/dev/null | grep -v '127.0.0.1' | grep -iE 'llama|python'; then
+if lsof -i -P 2>/dev/null | grep -viE '127\.0\.0\.1|\[::1\]|localhost' | grep -iE 'llama|python'; then
   echo "  ⚠ 检出非 loopback 连接 —— 违反 §20，需排查"
   exit 1
 else

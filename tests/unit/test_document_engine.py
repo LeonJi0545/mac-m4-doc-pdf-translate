@@ -189,6 +189,65 @@ def test_pdf_reader_imports_without_docling() -> None:
     assert hasattr(module, "parse_pdf")
 
 
+def test_missing_docling_artifacts_fails_loudly(tmp_settings: Settings) -> None:
+    """实机回归（tests/dev-mac/test.log）。
+
+    artifacts 目录缺失时，旧代码是「不设 artifacts_path，让 docling 自己去下载」——
+    在断网机上表现为一条跟真正原因无关的报错。现在必须在这里就炸，并且指出去哪修。
+    """
+    from app.document.pdf_reader import _resolve_artifacts_path
+
+    cfg = tmp_settings.model_copy(deep=True)
+    cfg.pdf.docling_artifacts_path = str(Path(tmp_settings.paths.install_root) / "nope")
+
+    with pytest.raises(ParseError) as exc:
+        _resolve_artifacts_path(cfg)
+    # 报错要能让人直接定位到配置项和备料步骤，而不是只说「失败了」
+    assert "pdf.docling_artifacts_path" in str(exc.value)
+    assert "§28.1" in str(exc.value)
+
+
+def test_empty_docling_artifacts_dir_is_also_rejected(tmp_settings: Settings,
+                                                      tmp_path: Path) -> None:
+    """目录存在但是空的同样不算数 —— install.sh 建了目录却没拷进去就是这个形态。"""
+    from app.document.pdf_reader import _resolve_artifacts_path
+
+    empty = tmp_path / "docling-empty"
+    empty.mkdir()
+    cfg = tmp_settings.model_copy(deep=True)
+    cfg.pdf.docling_artifacts_path = str(empty)
+
+    with pytest.raises(ParseError):
+        _resolve_artifacts_path(cfg)
+
+
+def test_populated_docling_artifacts_dir_passes(tmp_settings: Settings,
+                                                tmp_path: Path) -> None:
+    from app.document.pdf_reader import _resolve_artifacts_path
+
+    artifacts = tmp_path / "docling"
+    (artifacts / "docling-project--docling-layout-heron").mkdir(parents=True)
+    cfg = tmp_settings.model_copy(deep=True)
+    cfg.pdf.docling_artifacts_path = str(artifacts)
+
+    assert _resolve_artifacts_path(cfg) == str(artifacts)
+
+
+def test_configured_artifacts_path_is_not_the_docling_cache_root() -> None:
+    """配置里填的必须是 artifacts 目录，不是 ~/.cache/docling。
+
+    填成 cache 根目录时 docling 会报
+    "Model 'docling-project/docling-layout-heron' not found in artifacts_path"，
+    而这正是 tests/dev-mac/test.log 里那两条失败的来源。
+    """
+    import yaml
+
+    cfg = yaml.safe_load(Path("config/config.yaml").read_text(encoding="utf-8"))
+    configured = cfg["pdf"]["docling_artifacts_path"]
+    assert not configured.rstrip("/").endswith(".cache/docling"), configured
+    assert configured.startswith("/Users/Shared/"), configured
+
+
 def test_docling_item_types_map_correctly(tmp_settings: Settings) -> None:
     converter = FakeConverter(build_sample_document())
     parsed = parse_pdf(Path("sample.pdf"), tmp_settings, converter=converter)

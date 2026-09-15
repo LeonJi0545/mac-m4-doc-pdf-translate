@@ -85,9 +85,10 @@ python3 --version && uv --version && cmake --version && hf version
 
 ### 2.3 准备一份 sample.pdf
 
-`prepare-bundle.sh` 的第 4 步要真跑一次 Docling 解析，好把它的模型产物落盘。
+`prepare-bundle.sh` 的第 4 步要拿它做两件事：在 A 机上以**断网语义**验一遍 Docling
+模型齐不齐，然后跟着 bundle 拷到 B 机，装完再验一遍。
 
-**这份 sample.pdf 里最好包含扫描页**（即图片型 PDF）—— 否则 OCR 引擎的模型不会被触发下载，
+**这份 sample.pdf 必须包含扫描页**（即图片型 PDF）—— 否则 OCR 引擎的模型不会被触发下载，
 到了断网的 B 机上处理扫描件时才会失败，而且报错不明显。
 
 放在仓库根目录，命名 `sample.pdf`。
@@ -108,10 +109,17 @@ offline-bundle/
 ├── wheels/               # 全部 Python 依赖的 wheel
 ├── llama/llama-server    # 编译好的 arm64 二进制
 ├── models/hy-mt1.5/      # GGUF 权重
-├── docling/              # Docling + OCR 的模型缓存
+├── docling/              # Docling artifacts：一个模型一个 <org>--<repo> 子目录
+├── sample.pdf            # 脚本自动放，B 机装完拿它做离线自检
 ├── fonts/                # 中文字体 ← 需手动放
 └── libreoffice/          # LibreOffice dmg ← 需手动放
 ```
+
+> `docling/` 是 **artifacts 目录**，不是 `~/.cache/docling`。
+> 早先的做法是「不带 artifacts_path 跑一次解析，再把 `~/.cache/docling` 整个拷走」，
+> 结果 bundle 里只有 OCR 引擎那一份，layout / tableformer 落在了 Hugging Face 缓存里，
+> B 机断网后才炸（实机记录见 `tests/dev-mac/test.log`）。
+> 现在脚本改成显式下载 + 当场断网验收，第 4 步跑通就说明模型是齐的。
 
 ### 3.1 手动补两样东西
 
@@ -143,7 +151,10 @@ ls -la offline-bundle/wheels | head && ls -lh offline-bundle/llama/llama-server 
 - [ ] `offline-bundle/wheels/` 里有一堆 `.whl`
 - [ ] `offline-bundle/llama/llama-server` 存在且是 arm64（`file offline-bundle/llama/llama-server`）
 - [ ] `offline-bundle/models/hy-mt1.5/` 里有 `.gguf`
-- [ ] `offline-bundle/docling/` **非空** ← 最容易漏的一项
+- [ ] `offline-bundle/docling/` 里有 `docling-project--docling-layout-heron`
+      这类 `<org>--<repo>` 子目录 ← 最容易漏的一项；第 4 步打印的
+      「docling 离线解析通过」才是它真正的判据
+- [ ] `offline-bundle/sample.pdf` 存在（脚本自动拷，B 机自检要用）
 - [ ] `offline-bundle/fonts/` 里是 `.ttf` 或 `.ttc`，**不是 `.otf`**
 
 **记下 GGUF 的实际文件名**，下一步要用：
@@ -185,8 +196,15 @@ MODEL_FILE=HY-MT1.5-1.8B-Q4_K_M.gguf ./scripts/install.sh /path/to/offline-bundl
 > LaunchAgent 访问它们需要手动授「完全磁盘访问权限」，而授权对象是 Python 解释器，
 > 授权面偏大。放 `/Users/Shared` 零授权、零弹窗、重装系统后行为一致。
 
-脚本做六件事：拷代码 → 建离线 venv → 装 llama-server 与权重 → 铺 Docling 缓存与字体
-→ 渲染 launchd plist 到 `~/Library/LaunchAgents/` → 建源目录与输出目录。
+脚本做八件事：拷代码与配置 → 建离线 venv → 装 llama-server 与权重 →
+铺 Docling artifacts → 铺中文字体 → 渲染 launchd plist 到 `~/Library/LaunchAgents/` →
+建源目录与输出目录 → **离线自检**（用 bundle 里的 sample.pdf 真跑一次 PDF 解析）。
+
+最后那步是有意放在安装阶段的：模型缺没缺，肉眼 `ls` 看不出来，必须真解析一次才知道。
+急着往下走可以 `SKIP_VERIFY=1` 跳过，但那样就得在 §6 断网验收时补回来。
+
+重复执行是安全的：`config/` 下已存在的文件（`config.yaml`、术语库）不会被覆盖，
+仓库里的新版会落成同名 `.new` 文件等你自己比对。
 
 ### 4.2 确认安装
 
@@ -206,7 +224,7 @@ grep -c '@@' ~/Library/LaunchAgents/com.offline-translator.*.plist
 
 ### 4.3 核对配置
 
-打开 `/Users/Shared/offline-translator/config/config.yaml`，确认三项：
+打开 `/Users/Shared/offline-translator/config/config.yaml`，确认四项：
 
 ```yaml
 model:
@@ -220,7 +238,14 @@ fonts:
 doc_conversion:
   enabled: true   # 不装 LibreOffice 就设 false
   soffice_path: "/Applications/LibreOffice.app/Contents/MacOS/soffice"
+
+pdf:
+  docling_artifacts_path: "/Users/Shared/offline-translator/models/docling"
 ```
+
+> `pdf.docling_artifacts_path` 填的是 **artifacts 目录**——里面一个模型一个
+> `<org>--<repo>` 子目录。**不要**改成 `~/.cache/docling`（Docling 的 cache 根目录），
+> 那会得到 `Model 'docling-project/docling-layout-heron' not found in artifacts_path`。
 
 > `model.path` **必须是本地绝对路径**。填成 `tencent/HY-MT1.5-1.8B-GGUF:Q4_K_M`
 > 这类写法会被启动期的离线守卫直接拒绝 —— 那是 `-hf` 的形态，会联网拉取（§4.2 / §20）。
@@ -247,6 +272,11 @@ LaunchAgent 要用户登录后才启动。所以需要：
 ```bash
 ./scripts/start.sh
 ```
+
+`start.sh` 是幂等的**重新加载**：已加载的先 `bootout` 再 `bootstrap`，
+所以改完 plist 直接再跑一次就生效，不会静默沿用旧配置。
+加载完它会自己轮询 `health.sh`（默认最多等 60 秒，`STARTUP_TIMEOUT=N` 可调），
+等不到就**以非零码退出**并告诉你去看哪个日志 —— 不会像旧版那样吞掉错误还宣布成功。
 
 ### 5.3 确认
 
@@ -386,6 +416,8 @@ terms:
 | `模型文件不存在` | 路径拼错，或 GGUF 文件名与默认值不符 | `ls` 确认实际文件名后改 `config.yaml` |
 | `llama-server 地址 必须指向本机 loopback` | `base_url` 被改成了外网地址 | 改回 `http://127.0.0.1:8001` |
 | `配置文件不存在` | `OFFLINE_TRANSLATOR_CONFIG` 指错了 | 检查 api plist 里的该环境变量 |
+| `Load failed: 5: Input/output error` | 旧版 `start.sh` 用的 `launchctl load`，服务已加载时就报这个，**而且仍返回 0** | 已修：现在用 `bootstrap` / `bootout`。若仍看到，说明跑的是旧脚本 |
+| `Bootstrap failed: 37: Operation already in progress` | 上一次 `bootout` 还没落地 | `start.sh` 已会等待；手工操作时 `launchctl print gui/$(id -u)/com.offline-translator.llama` 确认消失后再来 |
 
 ### 翻译时报错
 
@@ -395,6 +427,9 @@ terms:
 | `找不到可用的中文字体` | 候选路径全不存在 | 错误信息会列出试过哪些路径，照着补 |
 | `.doc` 文件全部失败 | LibreOffice 没装或路径不对 | 看错误信息里给的三条路；不需要就把 `doc_conversion.enabled` 设 `false` |
 | PDF 全部失败，提示 `未安装 docling` | bundle 的 docling 没装上 | 回到 §4.2 确认依赖完整 |
+| `Docling 模型目录不存在或为空` | `pdf.docling_artifacts_path` 指向的目录没铺上 | 按 §4.3 核对路径；确认 `ls /Users/Shared/offline-translator/models/docling` 有 `<org>--<repo>` 子目录 |
+| `Model 'docling-project/docling-layout-heron' not found in artifacts_path`<br>`Available models in ...: RapidOcr` | 路径填成了 Docling 的 cache 根目录，或备料时只拷了缓存没显式下载 | 改 §4.3 的路径；若 bundle 本身就缺，回 A 机重跑 `prepare-bundle.sh` 第 4 步（新版会当场验收） |
+| `Image processor config not found: .../preprocessor_config.json` | 模型目录在、文件不全 —— 多半是拷了 Hugging Face 的符号链接树，到 B 机变成断链 | 回 A 机重跑第 4 步；新版脚本会检出符号链接并直接报错 |
 | 扫描件 PDF 失败但普通 PDF 正常 | OCR 模型没备进 bundle | A 机上用**含扫描页**的 sample.pdf 重跑第 4 步 |
 
 ### 跑着跑着停了 / 结果不对

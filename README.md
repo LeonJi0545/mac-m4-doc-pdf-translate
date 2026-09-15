@@ -119,7 +119,7 @@ launchd **不保证** api 与 llama-server 的启动顺序。依赖处理放在 
 | `sampling.*` | 官方推荐值 `0.7 / 20 / 0.6 / 1.05`（§4.2），非必要不要改 |
 | `doc_conversion.enabled` | 关掉则扫描阶段直接忽略 `.doc` |
 | `fonts.cjk_candidates` | 按顺序尝试，**优先 TTF**，TTC 需同时配 `subfont_index` |
-| `pdf.docling_artifacts_path` | 指向本地缓存，杜绝运行期联网 |
+| `pdf.docling_artifacts_path` | 指向本地 **artifacts 目录**（一个模型一个 `<org>--<repo>` 子目录），杜绝运行期联网。填成 Docling 的 cache 根目录（`~/.cache/docling`）会在解析时报 `layout-heron not found` —— 实机记录见 `tests/dev-mac/test.log` |
 
 ### 换模型只改一行
 
